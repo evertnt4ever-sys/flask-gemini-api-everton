@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AppData (Windows)
+AppData/
+
+# Outros diretórios do sistema
+"Ambiente de Impressão/"
+"Ambiente de Rede/"
+"Configurações Locais/"
+"Cookies"
+"Dados de Aplicativos/"
+"Favorites/"
+"Links/"
+"Menu Iniciar/"
+"Meus Documentos/"
+"Modelos/"
+"Recent/"
+"Saved Games/"
+"Searches/"
+"SendTo/"
+"Videos/"
+"Music/"
+"Documents/"
+"Downloads/"
+"3D Objects/"
+
+# Arquivos de sistema
+*.log
+*.tmp
+*.temp
