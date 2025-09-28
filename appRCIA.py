@@ -19,8 +19,8 @@ except Exception as e:
 app = Flask(__name__)
 
 # 3. Cria o modelo do Gemini.
-# 'gemini-pro' é o modelo de texto estável disponível na API v1 beta.
-model = genai.GenerativeModel('gemini-pro')
+# 'gemini-2.0-flash-001' é o modelo estável disponível na API v1beta.
+model = genai.GenerativeModel('gemini-2.0-flash-001')
 
 # 4. Cria o endpoint para a nossa API.
 # Este é o caminho que o seu aplicativo Android vai chamar.
