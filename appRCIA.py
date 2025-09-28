@@ -26,15 +26,15 @@ model = genai.GenerativeModel('gemini-2.0-flash-001')
 # Este é o caminho que o seu aplicativo Android vai chamar.
 @app.route('/ask', methods=['POST'])
 def ask_gemini():
-    # Pega os dados da requisição JSON que o app Android enviou.
-    data = request.get_json()
-    question = data.get('question')
-
-    # Se a pergunta não foi fornecida, retorna um erro.
-    if not question:
-        return jsonify({"error": "No question provided"}), 400
-
     try:
+        # Pega os dados da requisição JSON que o app Android enviou.
+        data = request.get_json()
+        question = data.get('question')
+
+        # Se a pergunta não foi fornecida, retorna um erro.
+        if not question:
+            return jsonify({"error": "No question provided"}), 400
+
         # Usa o modelo do Gemini para gerar uma resposta.
         response = model.generate_content(question)
         answer = response.text
