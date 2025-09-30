@@ -22,8 +22,11 @@ def ask_gemini():
         if not question:
             return jsonify({"error": "No question provided"}), 400
         
-        # Gera a resposta
-        response = model.generate_content(question)
+        # Gera a resposta com instruções para formato limpo
+        clean_instructions = "Responda de forma clara e direta, sem usar formatação markdown (sem **, *, #, etc.). Use apenas texto simples e limpo."
+        full_question = f"{clean_instructions}\n\n{question}"
+        
+        response = model.generate_content(full_question)
         answer = response.text
         
         return jsonify({"answer": answer})
