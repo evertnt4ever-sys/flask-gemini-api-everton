@@ -22,8 +22,13 @@ def ask_gemini():
         if not question:
             return jsonify({"error": "No question provided"}), 400
         
-        # Gera a resposta com instruções para formato limpo
-        clean_instructions = "Responda de forma clara e direta, sem usar formatação markdown (sem **, *, #, etc.). Use apenas texto simples e limpo."
+        # Gera a resposta com instruções para formato estruturado como ChatGPT
+        clean_instructions = """Responda de forma clara e estruturada, similar ao ChatGPT. Use:
+- Quebras de linha para separar parágrafos
+- Listas com bullet points (•) quando apropriado
+- Títulos simples sem símbolos especiais
+- Texto limpo e bem organizado
+- Mantenha a formatação legível mas sem markdown complexo"""
         full_question = f"{clean_instructions}\n\n{question}"
         
         response = model.generate_content(full_question)
