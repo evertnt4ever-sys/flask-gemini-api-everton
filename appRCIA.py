@@ -24,10 +24,12 @@ def ask_gemini():
         
         # Gera a resposta com instruções para formato estruturado como ChatGPT
         clean_instructions = """Responda de forma clara e estruturada, similar ao ChatGPT. Use:
-- Quebras de linha para separar parágrafos
+- Quebras de linha frequentes para facilitar a leitura
+- Parágrafos curtos (máximo 3-4 linhas)
 - Listas com bullet points (•) quando apropriado
 - Títulos simples sem símbolos especiais
 - Texto limpo e bem organizado
+- Quebre linhas naturalmente para evitar texto muito longo
 - Mantenha a formatação legível mas sem markdown complexo"""
         full_question = f"{clean_instructions}\n\n{question}"
         
