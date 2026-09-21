@@ -2,50 +2,50 @@ import os
 import google.generativeai as genai
 from flask import Flask, request, jsonify
 
-# Configura a API Key
-API_KEY = "AIzaSyD0V0Kp2AD7x903s-hIhyTFKiRUHoKC86M"
-genai.configure(api_key=API_KEY)
+# 1. Configura a API Key do Gemini.
+# A chave é lida de uma variável de ambiente, por segurança.
+try:
+    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+    if not GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY environment variable not set.")
+    genai.configure(api_key=GEMINI_API_KEY)
+    print("API Key do Gemini configurada com sucesso!")
+except Exception as e:
+    print(f"Erro na configuração da API Key: {e}")
+    # Em um ambiente de produção, o aplicativo deve sair se a chave não estiver configurada.
+    # raise e
 
-# Cria a instância do Flask
+# 2. Cria a instância do aplicativo Flask.
 app = Flask(__name__)
 
-# Cria o modelo
-model = genai.GenerativeModel('gemini-2.0-flash-001')
+# 3. Cria o modelo do Gemini.
+model = genai.GenerativeModel('gemini-pro')
 
+# 4. Cria o endpoint para a nossa API.
 @app.route('/ask', methods=['POST'])
 def ask_gemini():
+    # Adiciona um log no console do servidor para cada requisição recebida.
+    print("Requisição recebida no endpoint /ask.")
+
+    data = request.get_json()
+    question = data.get('question')
+
+    if not question:
+        print("Erro: Nenhuma pergunta fornecida na requisição.")
+        return jsonify({"error": "No question provided"}), 400
+
     try:
-        # Pega os dados da requisição
-        data = request.get_json()
-        question = data.get('question')
-        
-        if not question:
-            return jsonify({"error": "No question provided"}), 400
-        
-        # Gera a resposta com instruções para formato estruturado como ChatGPT
-        clean_instructions = """Responda de forma clara e estruturada, similar ao ChatGPT. Use:
-- Quebras de linha frequentes para facilitar a leitura
-- Parágrafos curtos (máximo 3-4 linhas)
-- Listas com bullet points (•) quando apropriado
-- Títulos simples sem símbolos especiais
-- Texto limpo e bem organizado
-- Quebre linhas naturalmente para evitar texto muito longo
-- Mantenha a formatação legível mas sem markdown complexo"""
-        full_question = f"{clean_instructions}\n\n{question}"
-        
-        response = model.generate_content(full_question)
+        print(f"Gerando conteúdo para a pergunta: '{question}'")
+        response = model.generate_content(question)
         answer = response.text
-        
+        print(f"Resposta gerada pelo Gemini: '{answer}'")
         return jsonify({"answer": answer})
-        
     except Exception as e:
-        print(f"Erro: {e}")
+        print(f"Erro ao gerar conteúdo com o Gemini: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({"status": "ok", "model": "gemini-2.0-flash-001"})
-
+# 5. Roda o servidor.
+# O host '0.0.0.0' permite que o servidor seja acessado de outros dispositivos na mesma rede.
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=5000, threaded=True)
+
