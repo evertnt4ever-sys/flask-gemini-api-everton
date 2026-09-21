@@ -1,10 +1,18 @@
 import os
+import re
 import google.generativeai as genai
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Lista de reserva caso a busca dinâmica falhe
+# Instrução do Sistema para proibir o modelo de exibir rascunhos ou pensamentos em inglês
+SYSTEM_INSTRUCTION = """Você é um assistente virtual em português do Brasil (pt-BR).
+REGRAS RÍGIDAS:
+1. Responda SEMPRE E EXCLUSIVAMENTE em português do Brasil (pt-BR).
+2. NUNCA inclua seu raciocínio interno, pensamentos, análises do prompt, planejamentos ou anotações em inglês.
+3. Não mostre etapas como 'The user wants...', 'Option A:', 'Greeting:'.
+4. Responda DIRETAMENTE com a resposta final limpa, educada e bem formatada para o usuário."""
+
 PREFERRED_MODELS = [
     'gemini-2.0-flash-exp',
     'gemini-1.5-flash-8b',
@@ -22,7 +30,6 @@ def get_api_key():
     return None
 
 def find_available_models():
-    """Consulta a API do Google para listar quais modelos aceitam perguntas nesta chave"""
     try:
         available = []
         for m in genai.list_models():
@@ -31,14 +38,22 @@ def find_available_models():
                 available.append(clean_name)
         return available
     except Exception as e:
-        print(f"Erro ao listar modelos do Gemini: {e}")
+        print(f"Erro ao listar modelos: {e}")
         return []
+
+def clean_thought_process(text: str) -> str:
+    """Remove blocos de raciocínio interno se o modelo os gerar por acidente"""
+    if "The user" in text or "Option A" in text or "Greeting:" in text or "Language:" in text:
+        match = re.search(r'(Perfeito|Olá|Com certeza|Entendido|Vamos|Para |Aqui está|Como você|Se você|1\.|2\.|3\.)', text, re.IGNORECASE)
+        if match:
+            return text[match.start():].strip()
+    return text.strip()
 
 @app.route('/ask', methods=['POST'])
 def ask_gemini():
     current_key = get_api_key()
     if not current_key:
-        return jsonify({"error": "ERRO NO SERVIDOR: A variável GEMINI_API_KEY não foi configurada no Render."}), 500
+        return jsonify({"error": "ERRO NO SERVIDOR: GEMINI_API_KEY não encontrada no Render."}), 500
 
     genai.configure(api_key=current_key)
 
@@ -48,26 +63,27 @@ def ask_gemini():
 
     question = data.get('question')
 
-    # 1. Busca os modelos disponíveis para esta chave de API
     available_models = find_available_models()
     models_to_test = available_models if available_models else PREFERRED_MODELS
 
     last_error = None
     for model_name in models_to_test:
         try:
-            print(f"Tentando modelo: {model_name}")
-            model = genai.GenerativeModel(model_name)
+            # Passa a system_instruction para forçar resposta direta em português
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                system_instruction=SYSTEM_INSTRUCTION
+            )
             response = model.generate_content(question)
             if hasattr(response, 'text') and response.text:
-                return jsonify({"answer": response.text}), 200
+                cleaned_text = clean_thought_process(response.text)
+                return jsonify({"answer": cleaned_text}), 200
         except Exception as e:
             last_error = e
             print(f"Falha no modelo {model_name}: {e}")
             continue
 
-    return jsonify({
-        "error": f"Erro do Gemini: {str(last_error)}. Modelos testados: {models_to_test}"
-    }), 500
+    return jsonify({"error": f"Erro do Gemini: {str(last_error)}"}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -83,7 +99,7 @@ def health():
     return jsonify({
         "status": "ok",
         "api_key_configurada": key is not None,
-        "modelos_disponiveis_para_sua_chave": available
+        "modelos_disponiveis": available
     }), 200
 
 if __name__ == '__main__':
