@@ -2,50 +2,59 @@ import os
 import google.generativeai as genai
 from flask import Flask, request, jsonify
 
-# 1. Configura a API Key do Gemini.
-# A chave é lida de uma variável de ambiente, por segurança.
-try:
-    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
-    if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY environment variable not set.")
-    genai.configure(api_key=GEMINI_API_KEY)
-    print("API Key do Gemini configurada com sucesso!")
-except Exception as e:
-    print(f"Erro na configuração da API Key: {e}")
-    # Em um ambiente de produção, o aplicativo deve sair se a chave não estiver configurada.
-    # raise e
-
-# 2. Cria a instância do aplicativo Flask.
 app = Flask(__name__)
 
-# 3. Cria o modelo do Gemini.
-model = genai.GenerativeModel('gemini-pro')
+# Modelo atual e suportado pelo Google
+MODEL_NAME = 'gemini-1.5-flash'
 
-# 4. Cria o endpoint para a nossa API.
+def get_api_key():
+    # Busca a chave em diferentes nomes comuns de variáveis
+    key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY') or os.environ.get('API_KEY')
+    if key:
+        return key.strip().strip('"').strip("'") # Remove aspas e espaços acidentais
+    return None
+
 @app.route('/ask', methods=['POST'])
 def ask_gemini():
-    # Adiciona um log no console do servidor para cada requisição recebida.
-    print("Requisição recebida no endpoint /ask.")
+    current_key = get_api_key()
+    
+    # Se a chave não existir no Render, avisa com erro claro
+    if not current_key:
+        error_msg = "ERRO NO SERVIDOR: A variável de ambiente GEMINI_API_KEY não foi encontrada no Render."
+        print(error_msg)
+        return jsonify({"error": error_msg}), 500
+
+    # Configura a API key
+    genai.configure(api_key=current_key)
 
     data = request.get_json()
+    if not data or 'question' not in data:
+        return jsonify({"error": "Nenhuma pergunta fornecida ('question')."}), 400
+
     question = data.get('question')
 
-    if not question:
-        print("Erro: Nenhuma pergunta fornecida na requisição.")
-        return jsonify({"error": "No question provided"}), 400
-
     try:
-        print(f"Gerando conteúdo para a pergunta: '{question}'")
+        model = genai.GenerativeModel(MODEL_NAME)
         response = model.generate_content(question)
-        answer = response.text
-        print(f"Resposta gerada pelo Gemini: '{answer}'")
-        return jsonify({"answer": answer})
+        
+        if hasattr(response, 'text') and response.text:
+            return jsonify({"answer": response.text}), 200
+        else:
+            return jsonify({"error": "O Gemini retornou uma resposta vazia."}), 500
+
     except Exception as e:
-        print(f"Erro ao gerar conteúdo com o Gemini: {e}")
-        return jsonify({"error": str(e)}), 500
+        print(f"Erro ao chamar Gemini: {e}")
+        return jsonify({"error": f"Erro do Gemini: {str(e)}"}), 500
 
-# 5. Roda o servidor.
-# O host '0.0.0.0' permite que o servidor seja acessado de outros dispositivos na mesma rede.
+@app.route('/health', methods=['GET'])
+def health():
+    key_exists = get_api_key() is not None
+    return jsonify({
+        "status": "ok",
+        "model": MODEL_NAME,
+        "api_key_configurada": key_exists
+    }), 200
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, threaded=True)
-
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, threaded=True)
