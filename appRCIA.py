@@ -5,23 +5,23 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Instrução do Sistema para proibir o modelo de exibir rascunhos ou pensamentos em inglês
-SYSTEM_INSTRUCTION = """Você é um assistente virtual em português do Brasil (pt-BR).
-REGRAS RÍGIDAS:
-1. Responda SEMPRE E EXCLUSIVAMENTE em português do Brasil (pt-BR).
-2. NUNCA inclua seu raciocínio interno, pensamentos, análises do prompt, planejamentos ou anotações em inglês.
-3. Não mostre etapas como 'The user wants...', 'Option A:', 'Greeting:'.
-4. Responda DIRETAMENTE com a resposta final limpa, educada e bem formatada para o usuário."""
+# Instrução do sistema para garantir respostas diretas e em português
+SYSTEM_INSTRUCTION = (
+    "Você é um assistente virtual prestativo. "
+    "Responda sempre em português do Brasil (pt-BR) de forma direta, clara e amigável. "
+    "Não inclua análises, rascunhos nem pensamentos em inglês."
+)
 
-PREFERRED_MODELS = [
-    'gemini-2.0-flash-exp',
-    'gemini-1.5-flash-8b',
+# Lista prioritária de modelos de texto estáveis
+DEFAULT_MODELS = [
     'gemini-1.5-flash',
     'gemini-2.0-flash',
-    'gemini-2.5-flash',
-    'gemini-3.6-flash',
+    'gemini-1.5-flash-latest',
     'gemini-1.5-pro'
 ]
+
+# Cache em memória do modelo ativo (elimina latência nas requisições seguintes)
+CACHED_WORKING_MODEL = None
 
 def get_api_key():
     key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY') or os.environ.get('API_KEY')
@@ -29,21 +29,24 @@ def get_api_key():
         return key.strip().strip('"').strip("'")
     return None
 
-def find_available_models():
+def find_text_models():
+    """Retorna apenas modelos de texto válidos (ignora TTS, áudio e embeddings)"""
     try:
-        available = []
+        valid_models = []
         for m in genai.list_models():
+            clean_name = m.name.replace('models/', '')
             if 'generateContent' in m.supported_generation_methods:
-                clean_name = m.name.replace('models/', '')
-                available.append(clean_name)
-        return available
+                # Descarta modelos TTS, áudio, imagens ou embeddings que estouram cota
+                if not any(bad in clean_name for bad in ['tts', 'embedding', 'audio', 'imagen', 'realtime']):
+                    valid_models.append(clean_name)
+        return valid_models if valid_models else DEFAULT_MODELS
     except Exception as e:
-        print(f"Erro ao listar modelos: {e}")
-        return []
+        print(f"Aviso ao listar modelos: {e}")
+        return DEFAULT_MODELS
 
 def clean_thought_process(text: str) -> str:
-    """Remove blocos de raciocínio interno se o modelo os gerar por acidente"""
-    if "The user" in text or "Option A" in text or "Greeting:" in text or "Language:" in text:
+    """Remove resquícios de rascunhos em inglês se gerados por acidente"""
+    if "The user" in text or "Option A" in text or "Greeting:" in text or "Always/Exclusively" in text:
         match = re.search(r'(Perfeito|Olá|Com certeza|Entendido|Vamos|Para |Aqui está|Como você|Se você|1\.|2\.|3\.)', text, re.IGNORECASE)
         if match:
             return text[match.start():].strip()
@@ -51,6 +54,8 @@ def clean_thought_process(text: str) -> str:
 
 @app.route('/ask', methods=['POST'])
 def ask_gemini():
+    global CACHED_WORKING_MODEL
+    
     current_key = get_api_key()
     if not current_key:
         return jsonify({"error": "ERRO NO SERVIDOR: GEMINI_API_KEY não encontrada no Render."}), 500
@@ -63,21 +68,39 @@ def ask_gemini():
 
     question = data.get('question')
 
-    available_models = find_available_models()
-    models_to_test = available_models if available_models else PREFERRED_MODELS
+    # 1. USA O MODELO EM CACHE (Resposta ultra rápida instantânea)
+    if CACHED_WORKING_MODEL:
+        try:
+            model = genai.GenerativeModel(
+                model_name=CACHED_WORKING_MODEL,
+                system_instruction=SYSTEM_INSTRUCTION
+            )
+            response = model.generate_content(question)
+            if hasattr(response, 'text') and response.text:
+                return jsonify({"answer": clean_thought_process(response.text)}), 200
+        except Exception as e:
+            print(f"Modelo em cache {CACHED_WORKING_MODEL} falhou ({e}). Buscando novo modelo...")
+            CACHED_WORKING_MODEL = None  # Invalida cache e reavalia
+
+    # 2. SE NÃO HOUVER CACHE, BUSCA APENAS MODELOS DE TEXTO
+    candidate_models = find_text_models()
+    for m in DEFAULT_MODELS:
+        if m not in candidate_models:
+            candidate_models.append(m)
 
     last_error = None
-    for model_name in models_to_test:
+    for model_name in candidate_models:
         try:
-            # Passa a system_instruction para forçar resposta direta em português
+            print(f"Testando modelo de texto: {model_name}")
             model = genai.GenerativeModel(
                 model_name=model_name,
                 system_instruction=SYSTEM_INSTRUCTION
             )
             response = model.generate_content(question)
             if hasattr(response, 'text') and response.text:
-                cleaned_text = clean_thought_process(response.text)
-                return jsonify({"answer": cleaned_text}), 200
+                CACHED_WORKING_MODEL = model_name  # Salva o modelo ativo no cache!
+                print(f"Sucesso! Modelo '{model_name}' salvo em cache.")
+                return jsonify({"answer": clean_thought_process(response.text)}), 200
         except Exception as e:
             last_error = e
             print(f"Falha no modelo {model_name}: {e}")
@@ -88,18 +111,10 @@ def ask_gemini():
 @app.route('/health', methods=['GET'])
 def health():
     key = get_api_key()
-    available = []
-    if key:
-        try:
-            genai.configure(api_key=key)
-            available = find_available_models()
-        except Exception as e:
-            available = [f"Erro: {e}"]
-
     return jsonify({
         "status": "ok",
         "api_key_configurada": key is not None,
-        "modelos_disponiveis": available
+        "modelo_em_cache": CACHED_WORKING_MODEL
     }), 200
 
 if __name__ == '__main__':
